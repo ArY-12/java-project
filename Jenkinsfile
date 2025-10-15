@@ -12,13 +12,11 @@ pipeline {
     }
     
     environment {
-        // SONAR_HOME = tool "Sonar"
         SONAR_HOST_URL = 'http://3.85.23.19:9000/'
         BACKEND_DIR = 'emp_backend'
         FRONTEND_DIR = 'employee frontend final'
         SONAR_PROJECT_KEY = 'Employee-Management-System'
         SONAR_PROJECT_NAME = 'Employee-Management-System'
-        // CHROME_BIN = '/usr/bin/chromium-browser'
     }
     
     stages {
@@ -33,7 +31,7 @@ pipeline {
         stage("Clone from Git") {
             steps {
                 script {
-                    echo "Cloning repository from Git.."
+                    echo "Cloning repository from Git..."
                     git branch: "master",
                         credentialsId: 'github-credentials',
                         url: 'https://github.com/ArY-12/java-project.git'
@@ -50,14 +48,16 @@ pipeline {
                     echo "=== Root Directory ==="
                     ls -la
                     
-                    echo "\n=== Backend Directory ==="
+                    echo ""
+                    echo "=== Backend Directory ==="
                     if [ -d "${BACKEND_DIR}" ]; then
                         ls -la "${BACKEND_DIR}"
                     else
                         echo "WARNING: Backend directory not found!"
                     fi
                     
-                    echo "\n=== Frontend Directory ==="
+                    echo ""
+                    echo "=== Frontend Directory ==="
                     if [ -d "${FRONTEND_DIR}" ]; then
                         ls -la "${FRONTEND_DIR}"
                     else
@@ -176,6 +176,9 @@ pipeline {
                 script {
                     echo "Starting SonarQube code analysis..."
                     
+                    // Get SonarQube scanner from tools
+                    def scannerHome = tool name: 'Sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                    
                     withSonarQubeEnv("Sonar") {
                         sh """
                             echo "Checking coverage files..."
@@ -190,8 +193,8 @@ pipeline {
                             else
                                 echo "⚠ Backend coverage not found"
                             fi
-        
-                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+
+                            ${scannerHome}/bin/sonar-scanner \
                                 -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                 -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
                                 -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
