@@ -190,20 +190,18 @@ pipeline {
                             else
                                 echo "⚠ Backend coverage not found"
                             fi
-
-                            
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.projectName=${SONAR_PROJECT_NAME} \
-                            -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
-                            -Dsonar.sources="${BACKEND_DIR}/src/main","${FRONTEND_DIR}/src" \
-                            -Dsonar.tests="${BACKEND_DIR}/src/test","${FRONTEND_DIR}/src" \
-                            -Dsonar.test.inclusions="**/*.spec.ts,**/*.spec.js,**/*.test.js,**/*.test.ts" \
-                            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/target/**" \
-                            -Dsonar.javascript.lcov.reportPaths="${FRONTEND_DIR}/coverage/lcov.info" \
-                            -Dsonar.java.coveragePlugin=jacoco \
-                            -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml" \
-                            -Dsonar.qualitygate.wait=true \
-                            -Dsonar.qualitygate.timeout=300
+        
+                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
+                                -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
+                                -Dsonar.sources="${BACKEND_DIR}/src/main","${FRONTEND_DIR}/src" \
+                                -Dsonar.tests="${BACKEND_DIR}/src/test","${FRONTEND_DIR}/src" \
+                                -Dsonar.test.inclusions="**/*.spec.ts,**/*.spec.js,**/*.test.js,**/*.test.ts" \
+                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/target/**" \
+                                -Dsonar.javascript.lcov.reportPaths="${FRONTEND_DIR}/coverage/lcov.info" \
+                                -Dsonar.java.coveragePlugin=jacoco \
+                                -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml"
                         """
                     }
                     
