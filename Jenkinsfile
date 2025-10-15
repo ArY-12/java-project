@@ -223,52 +223,46 @@ pipeline {
                 script {
                     echo "Starting SonarQube code analysis..."
                     
-                    try {
-                        // First, test connectivity to SonarQube
-                        echo "Testing SonarQube connectivity..."
+                    // Test connectivity to SonarQube
+                    echo "Testing SonarQube connectivity..."
+                    sh """
+                        echo "Attempting to reach SonarQube server..."
+                        curl -f --connect-timeout 10 ${SONAR_HOST_URL}api/system/status
+                    """
+                    
+                    // Get SonarQube scanner from tools
+                    def scannerHome = tool name: 'Sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                    
+                    withSonarQubeEnv("Sonar") {
                         sh """
-                            echo "Attempting to reach SonarQube server..."
-                            curl -f --connect-timeout 10 ${SONAR_HOST_URL}api/system/status
-                        """
-                        
-                        // Get SonarQube scanner from tools
-                        def scannerHome = tool name: 'Sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        
-                        withSonarQubeEnv("Sonar") {
-                            sh """
-                                echo "Checking coverage files..."
-                                if [ -f "${FRONTEND_DIR}/coverage/lcov.info" ]; then
-                                    echo "✓ Frontend coverage found"
-                                else
-                                    echo "⚠ Frontend coverage not found - SonarQube will use backend coverage only"
-                                fi
-                                
-                                if [ -f "${BACKEND_DIR}/target/site/jacoco/jacoco.xml" ]; then
-                                    echo "✓ Backend coverage found"
-                                else
-                                    echo "⚠ Backend coverage not found"
-                                fi
+                            echo "Checking coverage files..."
+                            if [ -f "${FRONTEND_DIR}/coverage/lcov.info" ]; then
+                                echo "✓ Frontend coverage found"
+                            else
+                                echo "⚠ Frontend coverage not found - SonarQube will use backend coverage only"
+                            fi
+                            
+                            if [ -f "${BACKEND_DIR}/target/site/jacoco/jacoco.xml" ]; then
+                                echo "✓ Backend coverage found"
+                            else
+                                echo "⚠ Backend coverage not found"
+                            fi
 
-                                ${scannerHome}/bin/sonar-scanner \
-                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                    -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
-                                    -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
-                                    -Dsonar.sources="${BACKEND_DIR}/src/main","${FRONTEND_DIR}/src" \
-                                    -Dsonar.tests="${BACKEND_DIR}/src/test","${FRONTEND_DIR}/src" \
-                                    -Dsonar.test.inclusions="**/*.spec.ts,**/*.spec.js,**/*.test.js,**/*.test.ts" \
-                                    -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/target/**" \
-                                    -Dsonar.javascript.lcov.reportPaths="${FRONTEND_DIR}/coverage/lcov.info" \
-                                    -Dsonar.java.coveragePlugin=jacoco \
-                                    -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml"
-                            """
-                        }
-                        
-                        echo "SonarQube analysis completed!"
-                    } catch (Exception e) {
-                        echo "⚠ SonarQube analysis failed: ${e.getMessage()}"
-                        echo "⚠ Continuing pipeline without SonarQube analysis..."
-                        currentBuild.result = 'UNSTABLE'
+                            ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
+                                -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
+                                -Dsonar.sources="${BACKEND_DIR}/src/main","${FRONTEND_DIR}/src" \
+                                -Dsonar.tests="${BACKEND_DIR}/src/test","${FRONTEND_DIR}/src" \
+                                -Dsonar.test.inclusions="**/*.spec.ts,**/*.spec.js,**/*.test.js,**/*.test.ts" \
+                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/target/**" \
+                                -Dsonar.javascript.lcov.reportPaths="${FRONTEND_DIR}/coverage/lcov.info" \
+                                -Dsonar.java.coveragePlugin=jacoco \
+                                -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml"
+                        """
                     }
+                    
+                    echo "SonarQube analysis completed!"
                 }
             }
         }
@@ -285,9 +279,20 @@ pipeline {
                         echo "Quality Gate Status: ${qg.status}"
                         
                         if (qg.status != 'OK') {
-                            error "❌ Quality Gate failed: ${qg.status}\n" +
-                                  "Pipeline aborted - Quality standards not met.\n" +
-                                  "Please check SonarQube dashboard for details: ${SONAR_HOST_URL}"
+                            // Explicitly fail the build
+                            currentBuild.result = 'FAILURE'
+                            error """
+❌ QUALITY GATE FAILED: ${qg.status}
+
+Quality standards NOT met:
+- Coverage is below 40% threshold
+- Pipeline execution STOPPED
+
+Check SonarQube dashboard for details:
+${SONAR_HOST_URL}dashboard?id=${SONAR_PROJECT_KEY}
+
+Fix the issues and trigger a new build.
+"""
                         } else {
                             echo "✓ Quality Gate passed successfully!"
                             echo "All quality standards have been met."
@@ -340,16 +345,22 @@ pipeline {
         success {
             echo "✓ Pipeline completed successfully!"
             echo "All stages passed without errors."
+            echo "Quality Gate: PASSED"
         }
         
         failure {
-            echo "✗ Pipeline failed!"
+            echo "✗ Pipeline FAILED!"
             echo "Check the logs above for error details."
+            echo "Possible reasons:"
+            echo "  - Quality Gate failed (coverage below threshold)"
+            echo "  - Build compilation errors"
+            echo "  - SonarQube analysis issues"
         }
         
         unstable {
             echo "⚠ Pipeline is unstable!"
             echo "Some tests may have failed."
+            echo "However, quality gate was checked and passed."
         }
         
         cleanup {
