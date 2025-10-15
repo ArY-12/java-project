@@ -12,7 +12,7 @@ pipeline {
     }
     
     environment {
-        SONAR_HOST_URL = 'http://3.85.23.19:9000/'
+        SONAR_HOST_URL = 'http://YOUR_NEW_IP:9000/'
         BACKEND_DIR = 'emp_backend'
         FRONTEND_DIR = 'employee frontend final'
         SONAR_PROJECT_KEY = 'Employee-Management-System'
@@ -108,7 +108,7 @@ pipeline {
                                     npm install
                                     
                                     echo "Building frontend application..."
-                                    CI=false npm run build
+                                    CI=false npm run build -- --skip-compatibility-check || CI=false npx ng build --skip-compatibility-check
                                 '''
                             }
                         }
@@ -124,21 +124,68 @@ pipeline {
                         script {
                             echo "Running Backend Tests..."
                             dir("${BACKEND_DIR}") {
-                                sh '''
+                                // Run tests and capture exit code
+                                def testResult = sh(script: '''
                                     echo "Executing Maven tests..."
-                                    mvn clean test || true
-                                    
+                                    mvn clean test
+                                ''', returnStatus: true)
+                                
+                                // Generate JaCoCo report regardless of test result
+                                sh '''
                                     echo "Generating JaCoCo coverage report..."
-                                    mvn jacoco:report || true
+                                    mvn jacoco:report || echo "JaCoCo report generation failed or no coverage data"
                                 '''
                                 
-                                junit testResults: 'target/surefire-reports/**/*.xml', 
-                                      allowEmptyResults: true
+                                // Check for test results
+                                sh '''
+                                    echo ""
+                                    echo "=== Test Results Summary ==="
+                                    if [ -d "target/surefire-reports" ]; then
+                                        echo "Test reports found:"
+                                        ls -la target/surefire-reports/
+                                        echo ""
+                                        echo "Number of test files: $(find target/surefire-reports -name '*.xml' | wc -l)"
+                                    else
+                                        echo "⚠ No test reports directory found!"
+                                    fi
+                                    
+                                    echo ""
+                                    if [ -f "target/jacoco.exec" ]; then
+                                        echo "✓ JaCoCo execution data found"
+                                        ls -lh target/jacoco.exec
+                                    else
+                                        echo "⚠ JaCoCo execution data not found"
+                                    fi
+                                    
+                                    echo ""
+                                    if [ -d "target/site/jacoco" ]; then
+                                        echo "✓ JaCoCo HTML report generated"
+                                        ls -la target/site/jacoco/
+                                    else
+                                        echo "⚠ JaCoCo HTML report not found"
+                                    fi
+                                '''
                                 
-                                jacoco execPattern: 'target/jacoco.exec',
-                                       classPattern: 'target/classes',
-                                       sourcePattern: 'src/main/java',
-                                       exclusionPattern: '**/test/**'
+                                // Archive test results
+                                junit testResults: 'target/surefire-reports/**/*.xml', 
+                                      allowEmptyResults: true,
+                                      skipPublishingChecks: true
+                                
+                                // Archive JaCoCo coverage
+                                try {
+                                    jacoco execPattern: 'target/jacoco.exec',
+                                           classPattern: 'target/classes',
+                                           sourcePattern: 'src/main/java',
+                                           exclusionPattern: '**/test/**'
+                                } catch (Exception e) {
+                                    echo "⚠ JaCoCo plugin execution failed: ${e.getMessage()}"
+                                }
+                                
+                                // Mark build as unstable if tests failed
+                                if (testResult != 0) {
+                                    echo "⚠ Some tests failed, but continuing pipeline..."
+                                    currentBuild.result = 'UNSTABLE'
+                                }
                             }
                             echo "Backend tests completed!"
                         }
@@ -176,39 +223,52 @@ pipeline {
                 script {
                     echo "Starting SonarQube code analysis..."
                     
-                    // Get SonarQube scanner from tools
-                    def scannerHome = tool name: 'Sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                    
-                    withSonarQubeEnv("Sonar") {
+                    try {
+                        // First, test connectivity to SonarQube
+                        echo "Testing SonarQube connectivity..."
                         sh """
-                            echo "Checking coverage files..."
-                            if [ -f "${FRONTEND_DIR}/coverage/lcov.info" ]; then
-                                echo "✓ Frontend coverage found"
-                            else
-                                echo "⚠ Frontend coverage not found - SonarQube will use backend coverage only"
-                            fi
-                            
-                            if [ -f "${BACKEND_DIR}/target/site/jacoco/jacoco.xml" ]; then
-                                echo "✓ Backend coverage found"
-                            else
-                                echo "⚠ Backend coverage not found"
-                            fi
-
-                            ${scannerHome}/bin/sonar-scanner \
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
-                                -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
-                                -Dsonar.sources="${BACKEND_DIR}/src/main","${FRONTEND_DIR}/src" \
-                                -Dsonar.tests="${BACKEND_DIR}/src/test","${FRONTEND_DIR}/src" \
-                                -Dsonar.test.inclusions="**/*.spec.ts,**/*.spec.js,**/*.test.js,**/*.test.ts" \
-                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/target/**" \
-                                -Dsonar.javascript.lcov.reportPaths="${FRONTEND_DIR}/coverage/lcov.info" \
-                                -Dsonar.java.coveragePlugin=jacoco \
-                                -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml"
+                            echo "Attempting to reach SonarQube server..."
+                            curl -f --connect-timeout 10 ${SONAR_HOST_URL}api/system/status
                         """
+                        
+                        // Get SonarQube scanner from tools
+                        def scannerHome = tool name: 'Sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        
+                        withSonarQubeEnv("Sonar") {
+                            sh """
+                                echo "Checking coverage files..."
+                                if [ -f "${FRONTEND_DIR}/coverage/lcov.info" ]; then
+                                    echo "✓ Frontend coverage found"
+                                else
+                                    echo "⚠ Frontend coverage not found - SonarQube will use backend coverage only"
+                                fi
+                                
+                                if [ -f "${BACKEND_DIR}/target/site/jacoco/jacoco.xml" ]; then
+                                    echo "✓ Backend coverage found"
+                                else
+                                    echo "⚠ Backend coverage not found"
+                                fi
+
+                                ${scannerHome}/bin/sonar-scanner \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
+                                    -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
+                                    -Dsonar.sources="${BACKEND_DIR}/src/main","${FRONTEND_DIR}/src" \
+                                    -Dsonar.tests="${BACKEND_DIR}/src/test","${FRONTEND_DIR}/src" \
+                                    -Dsonar.test.inclusions="**/*.spec.ts,**/*.spec.js,**/*.test.js,**/*.test.ts" \
+                                    -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/target/**" \
+                                    -Dsonar.javascript.lcov.reportPaths="${FRONTEND_DIR}/coverage/lcov.info" \
+                                    -Dsonar.java.coveragePlugin=jacoco \
+                                    -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml"
+                            """
+                        }
+                        
+                        echo "SonarQube analysis completed!"
+                    } catch (Exception e) {
+                        echo "⚠ SonarQube analysis failed: ${e.getMessage()}"
+                        echo "⚠ Continuing pipeline without SonarQube analysis..."
+                        currentBuild.result = 'UNSTABLE'
                     }
-                    
-                    echo "SonarQube analysis completed!"
                 }
             }
         }
@@ -219,19 +279,14 @@ pipeline {
                     echo "Waiting for SonarQube Quality Gate result..."
                     
                     timeout(time: 10, unit: 'MINUTES') {
-                        try {
-                            def qg = waitForQualityGate()
-                            
-                            if (qg.status != 'OK') {
-                                echo "Quality Gate Status: ${qg.status}"
-                                echo "⚠ Quality Gate failed but continuing pipeline..."
-                            } else {
-                                echo "✓ Quality Gate passed successfully!"
-                            }
-                        } catch (Exception e) {
-                            echo "Warning: Quality Gate check failed or timed out"
-                            echo "Error: ${e.getMessage()}"
-                            echo "⚠ Continuing pipeline despite Quality Gate failure..."
+                        def qg = waitForQualityGate()
+                        
+                        echo "Quality Gate Status: ${qg.status}"
+                        
+                        if (qg.status != 'OK') {
+                            error "Quality Gate failed: ${qg.status}. Pipeline aborted due to quality standards not being met."
+                        } else {
+                            echo "✓ Quality Gate passed successfully!"
                         }
                     }
                 }
