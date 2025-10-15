@@ -190,6 +190,7 @@ pipeline {
                             else
                                 echo "⚠ Backend coverage not found"
                             fi
+
                             
                             -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                             -Dsonar.projectName=${SONAR_PROJECT_NAME} \
