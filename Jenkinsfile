@@ -34,7 +34,7 @@ pipeline {
             steps {
                 script {
                     echo "Cloning repository from Git.."
-                    branch: "master",
+                    git branch: "master",
                         credentialsId: 'github-credentials',
                         url: 'https://github.com/ArY-12/java-project.git'
                     
