@@ -6,18 +6,19 @@ pipeline {
     }
     
     tools {
-        maven 'maven-3.9'
+        jdk 'Java-17'
+        maven 'Maven-3.9.11'
         nodejs 'Node-18-NVM'
     }
     
     environment {
         SONAR_HOME = tool "Sonar"
-        SONAR_HOST_URL = 'http://3.109.151.67:9000'
+        SONAR_HOST_URL = 'http://3.85.23.19:9000/'
         BACKEND_DIR = 'emp_backend'
         FRONTEND_DIR = 'employee frontend final'
         SONAR_PROJECT_KEY = 'Employee-Management-System'
         SONAR_PROJECT_NAME = 'Employee-Management-System'
-        CHROME_BIN = '/usr/bin/chromium-browser'
+        // CHROME_BIN = '/usr/bin/chromium-browser'
     }
     
     stages {
@@ -29,12 +30,13 @@ pipeline {
             }
         }
         
-        stage("Clone from Gitea") {
+        stage("Clone from Git") {
             steps {
                 script {
-                    echo "Cloning repository from Gitea..."
-                    git url: "http://34.228.7.104:3000/admin/project.git", 
-                        branch: "main"
+                    echo "Cloning repository from Git.."
+                    branch: "master",
+                        credentialsId: 'github-credentials',
+                        url: 'https://github.com/ArY-12/java-project.git'
                     
                     echo "Repository cloned successfully!"
                 }
