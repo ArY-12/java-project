@@ -1,0 +1,96 @@
+<div class="container mt-5">
+  <div class="row">
+    <div class="col-md-8 offset-md-2">
+      <div class="card">
+        <div class="card-header">
+          <h3>Add New Employee</h3>
+        </div>
+        <div class="card-body">
+          
+          <!-- Success Message -->
+          <div *ngIf="successMessage" class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ successMessage }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+
+          <!-- Error Message -->
+          <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ errorMessage }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+
+          <form (ngSubmit)="onSubmit()" #employeeForm="ngForm">
+            
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="fname" class="form-label">First Name</label>
+                <input type="text" class="form-control" id="fname" 
+                  [(ngModel)]="employee.fname" name="fname" placeholder="First Name" required>
+              </div>
+              <div class="col-md-6">
+                <label for="lname" class="form-label">Last Name</label>
+                <input type="text" class="form-control" id="lname" 
+                  [(ngModel)]="employee.lname" name="lname" placeholder="Last Name" required>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="email" class="form-label">Email Id</label>
+              <input type="email" class="form-control" id="email" 
+                [(ngModel)]="employee.email" name="email" placeholder="@gmail.com" required>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="department" class="form-label">Department</label>
+                <select class="form-control" id="department" 
+                  [(ngModel)]="employee.department" name="department" required>
+                  <option value="">Choose...</option>
+                  <option value="IT">IT</option>
+                  <option value="HR">HR</option>
+                  <option value="Finance">Finance</option>
+                  <option value="Sales">Sales</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label for="designation" class="form-label">Designation</label>
+                <select class="form-control" id="designation" 
+                  [(ngModel)]="employee.designation" name="designation" required>
+                  <option value="">Choose...</option>
+                  <option value="Developer">Developer</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Analyst">Analyst</option>
+                  <option value="Lead">Lead</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="salary" class="form-label">Salary</label>
+                <input type="number" class="form-control" id="salary" 
+                  [(ngModel)]="employee.salary" name="salary" placeholder="0" required>
+              </div>
+              <div class="col-md-6">
+                <label for="joiningDate" class="form-label">Joining Date</label>
+                <input type="date" class="form-control" id="joiningDate" 
+                  [(ngModel)]="employee.joiningDate" name="joiningDate" required>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 justify-content-center mt-4">
+              <button type="submit" class="btn btn-success btn-lg" style="min-width: 150px;">
+                Add Employee
+              </button>
+              <button type="button" class="btn btn-danger btn-lg" style="min-width: 150px;" 
+                (click)="goToEmployeeList()">
+                Cancel
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

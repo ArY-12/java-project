@@ -1,0 +1,33 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ReactiveFormsModule } from '@angular/forms';
+import { AddEmployeeComponent } from './add-employee.component';
+import { EmployeeService } from '../../services/employee.service';
+
+describe('AddEmployeeComponent', () => {
+  let component: AddEmployeeComponent;
+  let fixture: ComponentFixture<AddEmployeeComponent>;
+  let service: EmployeeService;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      declarations: [ AddEmployeeComponent ],
+      imports: [ HttpClientTestingModule, ReactiveFormsModule ],
+      providers: [ EmployeeService ]
+    })
+    .compileComponents();
+
+    fixture = TestBed.createComponent(AddEmployeeComponent);
+    component = fixture.componentInstance;
+    service = TestBed.inject(EmployeeService);
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should initialize form', () => {
+    expect(component.employeeForm).toBeDefined();
+    expect(component.employeeForm.get('name')).toBeDefined();
+  });
+});
