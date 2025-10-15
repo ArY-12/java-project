@@ -8,6 +8,7 @@ pipeline {
     tools {
         jdk 'Java-17'
         maven 'Maven-3.9.11'
+        nodejs 'Node-18'
     }
     
     environment {
@@ -190,7 +191,6 @@ pipeline {
                                 echo "⚠ Backend coverage not found"
                             fi
                             
-                            ${SONAR_HOME}/bin/sonar-scanner \
                             -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                             -Dsonar.projectName=${SONAR_PROJECT_NAME} \
                             -Dsonar.java.binaries="${BACKEND_DIR}/target/classes" \
