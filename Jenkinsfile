@@ -11,7 +11,7 @@ pipeline {
     }
     
     environment {
-        SONAR_HOME = tool "Sonar"
+        // SONAR_HOME = tool "Sonar"
         SONAR_HOST_URL = 'http://3.85.23.19:9000/'
         BACKEND_DIR = 'emp_backend'
         FRONTEND_DIR = 'employee frontend final'
