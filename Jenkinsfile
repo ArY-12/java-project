@@ -277,16 +277,20 @@ pipeline {
             steps {
                 script {
                     echo "Waiting for SonarQube Quality Gate result..."
+                    echo "This may take several minutes for large projects..."
                     
-                    timeout(time: 10, unit: 'MINUTES') {
+                    timeout(time: 20, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         
                         echo "Quality Gate Status: ${qg.status}"
                         
                         if (qg.status != 'OK') {
-                            error "Quality Gate failed: ${qg.status}. Pipeline aborted due to quality standards not being met."
+                            error "❌ Quality Gate failed: ${qg.status}\n" +
+                                  "Pipeline aborted - Quality standards not met.\n" +
+                                  "Please check SonarQube dashboard for details: ${SONAR_HOST_URL}"
                         } else {
                             echo "✓ Quality Gate passed successfully!"
+                            echo "All quality standards have been met."
                         }
                     }
                 }
