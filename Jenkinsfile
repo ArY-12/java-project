@@ -108,7 +108,7 @@ pipeline {
                                     npm install
                                     
                                     echo "Building frontend application..."
-                                    CI=false npm run build -- --skip-compatibility-check || CI=false npx ng build --skip-compatibility-check
+                                    CI=false npm run build
                                 '''
                             }
                         }
