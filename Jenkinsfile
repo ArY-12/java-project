@@ -12,11 +12,14 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL = 'http://100.26.198.76:9000/'
+        SONAR_HOST_URL = 'http://3.85.207.241:9000/'
         BACKEND_DIR = 'emp_backend'
         FRONTEND_DIR = 'employee frontend final'
         SONAR_PROJECT_KEY = 'Employee-Management-System'
         SONAR_PROJECT_NAME = 'Employee-Management-System'
+        DT_PROJECT_NAME = 'Employee-Management-System'
+        DT_PROJECT_VERSION = '1.0'
+        DT_URL = 'http://3.85.207.241:8081'  // ← UPDATE THIS WITH YOUR DEPENDENCY-TRACK IP!
     }
 
     stages {
@@ -301,6 +304,143 @@ Fix the issues and trigger a new build.
             }
         }
 
+        stage('Dependency Check') {
+            parallel {
+                stage('Backend Dependencies - Maven SBOM') {
+                    steps {
+                        script {
+                            echo '========================================='
+                            echo '=== Scanning Backend Dependencies ==='
+                            echo '========================================='
+                            dir("${BACKEND_DIR}") {
+                                sh '''
+                                    echo "Generating Maven SBOM (Software Bill of Materials)..."
+                                    mvn org.cyclonedx:cyclonedx-maven-plugin:2.7.11:makeAggregateBom \
+                                        -DoutputFormat=json \
+                                        -DoutputName=bom \
+                                        -DincludeBomSerialNumber=true \
+                                        -DincludeCompileScope=true \
+                                        -DincludeProvidedScope=true \
+                                        -DincludeRuntimeScope=true \
+                                        -DincludeSystemScope=true \
+                                        -DincludeTestScope=false
+                                    
+                                    echo ""
+                                    echo "Verifying SBOM generation..."
+                                    if [ -f "target/bom.json" ]; then
+                                        echo "✓ Backend SBOM generated successfully"
+                                        ls -lh target/bom.json
+                                        echo ""
+                                        echo "SBOM Summary:"
+                                        cat target/bom.json | grep -o '"components":\\[' | wc -l || echo "Components found in SBOM"
+                                    else
+                                        echo "⚠ Backend SBOM not found!"
+                                        exit 1
+                                    fi
+                                '''
+                            }
+                            echo '✓ Backend dependency scan completed!'
+                        }
+                    }
+                }
+                
+                stage('Frontend Dependencies - NPM SBOM') {
+                    steps {
+                        script {
+                            echo '========================================='
+                            echo '=== Scanning Frontend Dependencies ==='
+                            echo '========================================='
+                            dir("${FRONTEND_DIR}") {
+                                sh '''
+                                    echo "Checking for CycloneDX NPM..."
+                                    if ! command -v cyclonedx-npm &> /dev/null; then
+                                        echo "Installing CycloneDX for NPM..."
+                                        npm install -g @cyclonedx/cyclonedx-npm
+                                    else
+                                        echo "CycloneDX NPM already installed"
+                                    fi
+                                    
+                                    echo ""
+                                    echo "Generating NPM SBOM..."
+                                    cyclonedx-npm --output-file bom.json --output-format JSON
+                                    
+                                    echo ""
+                                    echo "Verifying SBOM generation..."
+                                    if [ -f "bom.json" ]; then
+                                        echo "✓ Frontend SBOM generated successfully"
+                                        ls -lh bom.json
+                                        echo ""
+                                        echo "SBOM Summary:"
+                                        cat bom.json | grep -o '"components":\\[' | wc -l || echo "Components found in SBOM"
+                                    else
+                                        echo "⚠ Frontend SBOM not found!"
+                                        exit 1
+                                    fi
+                                '''
+                            }
+                            echo '✓ Frontend dependency scan completed!'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Upload to Dependency-Track') {
+            steps {
+                script {
+                    echo '========================================='
+                    echo '=== Uploading SBOMs to Dependency-Track ==='
+                    echo '========================================='
+                    
+                    // Get API key from credentials
+                    withCredentials([string(credentialsId: 'dependency-track-api', variable: 'DT_API_KEY')]) {
+                        // Upload Backend SBOM
+                        dir("${BACKEND_DIR}") {
+                            if (fileExists('target/bom.json')) {
+                                echo 'Uploading Backend SBOM...'
+                                dependencyTrackPublisher(
+                                    artifact: 'target/bom.json',
+                                    projectName: "${DT_PROJECT_NAME}-Backend",
+                                    projectVersion: "${DT_PROJECT_VERSION}",
+                                    synchronous: true,
+                                    autoCreateProjects: true,
+                                    dependencyTrackUrl: "${DT_URL}",
+                                    dependencyTrackApiKey: "${DT_API_KEY}"
+                                )
+                                echo '✓ Backend SBOM uploaded successfully!'
+                            } else {
+                                echo '⚠ Backend SBOM not found, skipping upload'
+                            }
+                        }
+                        
+                        // Upload Frontend SBOM
+                        dir("${FRONTEND_DIR}") {
+                            if (fileExists('bom.json')) {
+                                echo 'Uploading Frontend SBOM...'
+                                dependencyTrackPublisher(
+                                    artifact: 'bom.json',
+                                    projectName: "${DT_PROJECT_NAME}-Frontend",
+                                    projectVersion: "${DT_PROJECT_VERSION}",
+                                    synchronous: true,
+                                    autoCreateProjects: true,
+                                    dependencyTrackUrl: "${DT_URL}",
+                                    dependencyTrackApiKey: "${DT_API_KEY}"
+                                )
+                                echo '✓ Frontend SBOM uploaded successfully!'
+                            } else {
+                                echo '⚠ Frontend SBOM not found, skipping upload'
+                            }
+                        }
+                    }
+                    
+                    echo '========================================='
+                    echo '✓ Dependency-Track analysis complete!'
+                    echo "Check vulnerabilities at: ${DT_URL}"
+                    echo '========================================='
+                }
+            }
+        }
+
         stage('Archive Artifacts') {
             steps {
                 script {
@@ -316,6 +456,11 @@ Fix the issues and trigger a new build.
 
                     archiveArtifacts artifacts: "${FRONTEND_DIR}/coverage/**/*",
                                      allowEmptyArchive: true
+                    
+                    // Archive SBOMs
+                    archiveArtifacts artifacts: "${BACKEND_DIR}/target/bom.json,${FRONTEND_DIR}/bom.json",
+                                     allowEmptyArchive: true,
+                                     fingerprint: true
 
                     echo 'Artifacts archived successfully!'
                 }
@@ -325,11 +470,16 @@ Fix the issues and trigger a new build.
         stage('Deploy') {
             steps {
                 script {
+                    echo '========================================='
                     echo '=== Deployment Stage ==='
-                    echo 'Build completed successfully!'
+                    echo '========================================='
+                    echo '✓ Quality Gate: PASSED'
+                    echo '✓ Dependencies: SCANNED'
+                    echo '✓ Build completed successfully!'
                     echo 'Ready for deployment...'
-
+                    echo ''
                     echo 'Deployment stage completed!'
+                    echo '========================================='
                 }
             }
         }
@@ -337,27 +487,32 @@ Fix the issues and trigger a new build.
 
     post {
         always {
+            echo '========================================='
             echo '=== Pipeline Execution Summary ==='
             echo "Pipeline finished at: ${new Date()}"
+            echo '========================================='
         }
 
         success {
-            echo "✓ Pipeline completed successfully!"
+            echo '✓✓✓ Pipeline completed successfully! ✓✓✓'
             echo 'All stages passed without errors.'
-            echo 'Quality Gate: PASSED'
+            echo 'Quality Gate: PASSED ✓'
+            echo 'Dependencies: SCANNED ✓'
+            echo "View Dependency-Track: ${DT_URL}"
         }
 
         failure {
-            echo "✗ Pipeline FAILED!"
+            echo '❌❌❌ Pipeline FAILED! ❌❌❌'
             echo 'Check the logs above for error details.'
             echo 'Possible reasons:'
             echo '  - Quality Gate failed (coverage below threshold)'
             echo '  - Build compilation errors'
             echo '  - SonarQube analysis issues'
+            echo '  - Dependency scanning issues'
         }
 
         unstable {
-            echo "⚠ Pipeline is unstable!"
+            echo '⚠⚠⚠ Pipeline is unstable! ⚠⚠⚠'
             echo 'Some tests may have failed.'
             echo 'However, quality gate was checked and passed.'
         }
