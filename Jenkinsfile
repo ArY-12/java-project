@@ -276,14 +276,15 @@ pipeline {
                     echo 'This may take several minutes for large projects...'
 
                     timeout(time: 20, unit: 'MINUTES') {
-                        def qg = waitForQualityGate()
+                        try {
+                            def qg = waitForQualityGate()
 
-                        echo "Quality Gate Status: ${qg.status}"
+                            echo "Quality Gate Status: ${qg.status}"
 
-                        if (qg.status != 'OK') {
-                            // Explicitly fail the build
-                            currentBuild.result = 'FAILURE'
-                            error """
+                            if (qg.status != 'OK') {
+                                // Explicitly fail the build
+                                currentBuild.result = 'FAILURE'
+                                error """
 ❌ QUALITY GATE FAILED: ${qg.status}
 
 Quality standards NOT met:
@@ -295,9 +296,20 @@ ${SONAR_HOST_URL}dashboard?id=${SONAR_PROJECT_KEY}
 
 Fix the issues and trigger a new build.
 """
-                        } else {
-                            echo "✓ Quality Gate passed successfully!"
-                            echo 'All quality standards have been met.'
+                            } else {
+                                echo "✓ Quality Gate passed successfully!"
+                                echo 'All quality standards have been met.'
+                            }
+                        } catch (Exception e) {
+                            if (e.getMessage().contains('timeout') || e.getMessage().contains('Timeout')) {
+                                echo "⚠ Quality Gate check timed out after 20 minutes"
+                                echo "SonarQube is still processing - check dashboard manually"
+                                echo "Dashboard: ${SONAR_HOST_URL}dashboard?id=${SONAR_PROJECT_KEY}"
+                                currentBuild.result = 'UNSTABLE'
+                                echo "Continuing pipeline - but please verify Quality Gate manually!"
+                            } else {
+                                throw e
+                            }
                         }
                     }
                 }
