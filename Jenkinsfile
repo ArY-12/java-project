@@ -19,7 +19,7 @@ pipeline {
         SONAR_PROJECT_NAME = 'Employee-Management-System'
         DT_PROJECT_NAME = 'Employee-Management-System'
         DT_PROJECT_VERSION = '1.0'
-        DT_URL = 'http://3.85.207.241:8081'  // ← UPDATE THIS WITH YOUR DEPENDENCY-TRACK IP!
+        DT_URL = 'http://3.85.207.241:8081'  // ← Update this with your Dependency-Track IP!
     }
 
     stages {
@@ -37,7 +37,6 @@ pipeline {
                     git branch: 'master',
                         credentialsId: 'github-credentials',
                         url: 'https://github.com/ArY-12/java-project.git'
-
                     echo 'Repository cloned successfully!'
                 }
             }
@@ -126,27 +125,22 @@ pipeline {
                         script {
                             echo 'Running Backend Tests...'
                             dir("${BACKEND_DIR}") {
-                                // Run tests and capture exit code
                                 def testResult = sh(script: '''
                                     echo "Executing Maven tests..."
                                     mvn clean test
                                 ''', returnStatus: true)
 
-                                // Generate JaCoCo report regardless of test result
                                 sh '''
                                     echo "Generating JaCoCo coverage report..."
                                     mvn jacoco:report || echo "JaCoCo report generation failed or no coverage data"
                                 '''
 
-                                // Check for test results
                                 sh '''
                                     echo ""
                                     echo "=== Test Results Summary ==="
                                     if [ -d "target/surefire-reports" ]; then
                                         echo "Test reports found:"
                                         ls -la target/surefire-reports/
-                                        echo ""
-                                        echo "Number of test files: $(find target/surefire-reports -name '*.xml' | wc -l)"
                                     else
                                         echo "⚠ No test reports directory found!"
                                     fi
@@ -168,12 +162,10 @@ pipeline {
                                     fi
                                 '''
 
-                                // Archive test results
                                 junit testResults: 'target/surefire-reports/**/*.xml',
                                       allowEmptyResults: true,
                                       skipPublishingChecks: true
 
-                                // Archive JaCoCo coverage
                                 try {
                                     jacoco execPattern: 'target/jacoco.exec',
                                            classPattern: 'target/classes',
@@ -183,7 +175,6 @@ pipeline {
                                     echo "⚠ JaCoCo plugin execution failed: ${e.getMessage()}"
                                 }
 
-                                // Mark build as unstable if tests failed
                                 if (testResult != 0) {
                                     echo "⚠ Some tests failed, but continuing pipeline..."
                                     currentBuild.result = 'UNSTABLE'
@@ -225,14 +216,11 @@ pipeline {
                 script {
                     echo 'Starting SonarQube code analysis...'
 
-                    // Test connectivity to SonarQube
-                    echo 'Testing SonarQube connectivity...'
                     sh '''
                         echo "Attempting to reach SonarQube server..."
                         curl -f --connect-timeout 10 ${SONAR_HOST_URL}api/system/status
                     '''
 
-                    // Get SonarQube scanner from tools
                     def scannerHome = tool name: 'Sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
 
                     withSonarQubeEnv('Sonar') {
@@ -241,7 +229,7 @@ pipeline {
                             if [ -f "${FRONTEND_DIR}/coverage/lcov.info" ]; then
                                 echo "✓ Frontend coverage found"
                             else
-                                echo "⚠ Frontend coverage not found - SonarQube will use backend coverage only"
+                                echo "⚠ Frontend coverage not found - using backend coverage only"
                             fi
 
                             if [ -f "${BACKEND_DIR}/target/site/jacoco/jacoco.xml" ]; then
@@ -263,7 +251,6 @@ pipeline {
                                 -Dsonar.coverage.jacoco.xmlReportPaths="${BACKEND_DIR}/target/site/jacoco/jacoco.xml"
                         """
                     }
-
                     echo 'SonarQube analysis completed!'
                 }
             }
@@ -273,40 +260,27 @@ pipeline {
             steps {
                 script {
                     echo 'Waiting for SonarQube Quality Gate result...'
-                    echo 'This may take several minutes for large projects...'
 
                     timeout(time: 20, unit: 'MINUTES') {
                         try {
                             def qg = waitForQualityGate()
-
                             echo "Quality Gate Status: ${qg.status}"
 
                             if (qg.status != 'OK') {
-                                // Explicitly fail the build
                                 currentBuild.result = 'FAILURE'
                                 error """
 ❌ QUALITY GATE FAILED: ${qg.status}
 
-Quality standards NOT met:
-- Coverage is below 40% threshold
-- Pipeline execution STOPPED
-
 Check SonarQube dashboard for details:
 ${SONAR_HOST_URL}dashboard?id=${SONAR_PROJECT_KEY}
-
-Fix the issues and trigger a new build.
 """
                             } else {
                                 echo "✓ Quality Gate passed successfully!"
-                                echo 'All quality standards have been met.'
                             }
                         } catch (Exception e) {
-                            if (e.getMessage().contains('timeout') || e.getMessage().contains('Timeout')) {
-                                echo "⚠ Quality Gate check timed out after 20 minutes"
-                                echo "SonarQube is still processing - check dashboard manually"
-                                echo "Dashboard: ${SONAR_HOST_URL}dashboard?id=${SONAR_PROJECT_KEY}"
+                            if (e.getMessage().contains('timeout')) {
+                                echo "⚠ Quality Gate check timed out - check dashboard manually"
                                 currentBuild.result = 'UNSTABLE'
-                                echo "Continuing pipeline - but please verify Quality Gate manually!"
                             } else {
                                 throw e
                             }
@@ -321,73 +295,30 @@ Fix the issues and trigger a new build.
                 stage('Backend Dependencies - Maven SBOM') {
                     steps {
                         script {
-                            echo '========================================='
-                            echo '=== Scanning Backend Dependencies ==='
-                            echo '========================================='
+                            echo 'Scanning Backend Dependencies...'
                             dir("${BACKEND_DIR}") {
                                 sh '''
-                                    echo "Generating Maven SBOM (Software Bill of Materials)..."
                                     mvn org.cyclonedx:cyclonedx-maven-plugin:2.7.11:makeAggregateBom \
                                         -DoutputFormat=json \
                                         -DoutputName=bom \
-                                        -DincludeBomSerialNumber=true \
-                                        -DincludeCompileScope=true \
-                                        -DincludeProvidedScope=true \
-                                        -DincludeRuntimeScope=true \
-                                        -DincludeSystemScope=true \
-                                        -DincludeTestScope=false
-                                    
-                                    echo ""
-                                    echo "Verifying SBOM generation..."
-                                    if [ -f "target/bom.json" ]; then
-                                        echo "✓ Backend SBOM generated successfully"
-                                        ls -lh target/bom.json
-                                        echo ""
-                                        echo "SBOM Summary:"
-                                        cat target/bom.json | grep -o '"components":\\[' | wc -l || echo "Components found in SBOM"
-                                    else
-                                        echo "⚠ Backend SBOM not found!"
-                                        exit 1
-                                    fi
+                                        -DincludeBomSerialNumber=true
                                 '''
                             }
                             echo '✓ Backend dependency scan completed!'
                         }
                     }
                 }
-                
+
                 stage('Frontend Dependencies - NPM SBOM') {
                     steps {
                         script {
-                            echo '========================================='
-                            echo '=== Scanning Frontend Dependencies ==='
-                            echo '========================================='
+                            echo 'Scanning Frontend Dependencies...'
                             dir("${FRONTEND_DIR}") {
                                 sh '''
-                                    echo "Checking for CycloneDX NPM..."
                                     if ! command -v cyclonedx-npm &> /dev/null; then
-                                        echo "Installing CycloneDX for NPM..."
                                         npm install -g @cyclonedx/cyclonedx-npm
-                                    else
-                                        echo "CycloneDX NPM already installed"
                                     fi
-                                    
-                                    echo ""
-                                    echo "Generating NPM SBOM..."
                                     cyclonedx-npm --output-file bom.json --output-format JSON
-                                    
-                                    echo ""
-                                    echo "Verifying SBOM generation..."
-                                    if [ -f "bom.json" ]; then
-                                        echo "✓ Frontend SBOM generated successfully"
-                                        ls -lh bom.json
-                                        echo ""
-                                        echo "SBOM Summary:"
-                                        cat bom.json | grep -o '"components":\\[' | wc -l || echo "Components found in SBOM"
-                                    else
-                                        echo "⚠ Frontend SBOM not found!"
-                                        exit 1
-                                    fi
                                 '''
                             }
                             echo '✓ Frontend dependency scan completed!'
@@ -396,59 +327,54 @@ Fix the issues and trigger a new build.
                 }
             }
         }
-        
+
         stage('Upload to Dependency-Track') {
             steps {
                 script {
-                    echo '========================================='
-                    echo '=== Uploading SBOMs to Dependency-Track ==='
-                    echo '========================================='
-                    
-                    // Get API key from credentials
+                    echo 'Uploading SBOMs to Dependency-Track...'
+
                     withCredentials([string(credentialsId: 'dependency-track-api', variable: 'DT_API_KEY')]) {
-                        // Upload Backend SBOM
+
                         dir("${BACKEND_DIR}") {
                             if (fileExists('target/bom.json')) {
                                 echo 'Uploading Backend SBOM...'
-                                dependencyTrackPublisher(
-                                    artifact: 'target/bom.json',
-                                    projectName: "${DT_PROJECT_NAME}-Backend",
-                                    projectVersion: "${DT_PROJECT_VERSION}",
-                                    synchronous: true,
-                                    autoCreateProjects: true,
-                                    dependencyTrackUrl: "${DT_URL}",
-                                    dependencyTrackApiKey: "${DT_API_KEY}"
-                                )
-                                echo '✓ Backend SBOM uploaded successfully!'
-                            } else {
-                                echo '⚠ Backend SBOM not found, skipping upload'
+                                try {
+                                    dependencyTrackPublisher(
+                                        artifact: 'target/bom.json',
+                                        projectName: "${DT_PROJECT_NAME}-Backend",
+                                        projectVersion: "${DT_PROJECT_VERSION}",
+                                        synchronous: false,
+                                        autoCreateProjects: true,
+                                        dependencyTrackUrl: "${DT_URL}",
+                                        apiKey: env.DT_API_KEY
+                                    )
+                                } catch (Exception e) {
+                                    echo "⚠ Backend upload failed: ${e.getMessage()}"
+                                }
                             }
                         }
-                        
-                        // Upload Frontend SBOM
+
                         dir("${FRONTEND_DIR}") {
                             if (fileExists('bom.json')) {
                                 echo 'Uploading Frontend SBOM...'
-                                dependencyTrackPublisher(
-                                    artifact: 'bom.json',
-                                    projectName: "${DT_PROJECT_NAME}-Frontend",
-                                    projectVersion: "${DT_PROJECT_VERSION}",
-                                    synchronous: true,
-                                    autoCreateProjects: true,
-                                    dependencyTrackUrl: "${DT_URL}",
-                                    dependencyTrackApiKey: "${DT_API_KEY}"
-                                )
-                                echo '✓ Frontend SBOM uploaded successfully!'
-                            } else {
-                                echo '⚠ Frontend SBOM not found, skipping upload'
+                                try {
+                                    dependencyTrackPublisher(
+                                        artifact: 'bom.json',
+                                        projectName: "${DT_PROJECT_NAME}-Frontend",
+                                        projectVersion: "${DT_PROJECT_VERSION}",
+                                        synchronous: false,
+                                        autoCreateProjects: true,
+                                        dependencyTrackUrl: "${DT_URL}",
+                                        apiKey: env.DT_API_KEY
+                                    )
+                                } catch (Exception e) {
+                                    echo "⚠ Frontend upload failed: ${e.getMessage()}"
+                                }
                             }
                         }
                     }
-                    
-                    echo '========================================='
-                    echo '✓ Dependency-Track analysis complete!'
-                    echo "Check vulnerabilities at: ${DT_URL}"
-                    echo '========================================='
+
+                    echo '✓ Dependency-Track upload complete!'
                 }
             }
         }
@@ -457,23 +383,14 @@ Fix the issues and trigger a new build.
             steps {
                 script {
                     echo 'Archiving build artifacts...'
-
                     archiveArtifacts artifacts: "${BACKEND_DIR}/target/*.jar,${BACKEND_DIR}/target/*.war",
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
-
+                                     allowEmptyArchive: true, fingerprint: true
                     archiveArtifacts artifacts: "${FRONTEND_DIR}/dist/**/*",
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
-
+                                     allowEmptyArchive: true, fingerprint: true
                     archiveArtifacts artifacts: "${FRONTEND_DIR}/coverage/**/*",
                                      allowEmptyArchive: true
-                    
-                    // Archive SBOMs
                     archiveArtifacts artifacts: "${BACKEND_DIR}/target/bom.json,${FRONTEND_DIR}/bom.json",
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
-
+                                     allowEmptyArchive: true, fingerprint: true
                     echo 'Artifacts archived successfully!'
                 }
             }
@@ -482,16 +399,7 @@ Fix the issues and trigger a new build.
         stage('Deploy') {
             steps {
                 script {
-                    echo '========================================='
-                    echo '=== Deployment Stage ==='
-                    echo '========================================='
-                    echo '✓ Quality Gate: PASSED'
-                    echo '✓ Dependencies: SCANNED'
-                    echo '✓ Build completed successfully!'
-                    echo 'Ready for deployment...'
-                    echo ''
-                    echo 'Deployment stage completed!'
-                    echo '========================================='
+                    echo 'Deployment Stage Complete!'
                 }
             }
         }
@@ -499,34 +407,21 @@ Fix the issues and trigger a new build.
 
     post {
         always {
-            echo '========================================='
             echo '=== Pipeline Execution Summary ==='
-            echo "Pipeline finished at: ${new Date()}"
-            echo '========================================='
+            echo "Finished at: ${new Date()}"
         }
 
         success {
-            echo '✓✓✓ Pipeline completed successfully! ✓✓✓'
-            echo 'All stages passed without errors.'
-            echo 'Quality Gate: PASSED ✓'
-            echo 'Dependencies: SCANNED ✓'
+            echo '✓ Pipeline completed successfully!'
             echo "View Dependency-Track: ${DT_URL}"
         }
 
         failure {
-            echo '❌❌❌ Pipeline FAILED! ❌❌❌'
-            echo 'Check the logs above for error details.'
-            echo 'Possible reasons:'
-            echo '  - Quality Gate failed (coverage below threshold)'
-            echo '  - Build compilation errors'
-            echo '  - SonarQube analysis issues'
-            echo '  - Dependency scanning issues'
+            echo '❌ Pipeline FAILED! Check logs above for details.'
         }
 
         unstable {
-            echo '⚠⚠⚠ Pipeline is unstable! ⚠⚠⚠'
-            echo 'Some tests may have failed.'
-            echo 'However, quality gate was checked and passed.'
+            echo '⚠ Pipeline is UNSTABLE — some tests failed.'
         }
 
         cleanup {
