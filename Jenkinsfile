@@ -12,14 +12,14 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL = 'http://3.86.68.99:9000/'
+        SONAR_HOST_URL = 'http://54.162.90.171:9000/'
         BACKEND_DIR = 'emp_backend'
         FRONTEND_DIR = 'employee frontend final'
         SONAR_PROJECT_KEY = 'Employee-Management-System'
         SONAR_PROJECT_NAME = 'Employee-Management-System'
         DT_PROJECT_NAME = 'Employee-Management-System'
         DT_PROJECT_VERSION = '1.0'
-        DT_URL = 'http://3.86.68.99:8081'  // ← Update this with your Dependency-Track IP!
+        DT_URL = 'http://54.162.90.171:8081'  // ← Update this with your Dependency-Track IP!
     }
 
     stages {
