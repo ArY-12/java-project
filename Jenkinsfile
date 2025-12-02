@@ -14,7 +14,7 @@ pipeline {
     environment {
         SONAR_HOST_URL = 'http://54.162.90.171:9000/'
         BACKEND_DIR = 'emp_backend'
-        FRONTEND_DIR = 'employee frontend final'
+        FRONTEND_DIR = 'employee_frontend_final'
         SONAR_PROJECT_KEY = 'Employee-Management-System'
         SONAR_PROJECT_NAME = 'Employee-Management-System'
         DT_PROJECT_NAME = 'Employee-Management-System'
